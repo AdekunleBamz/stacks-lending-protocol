@@ -2,6 +2,7 @@
 (define-constant ERR_INVALID_WITHDRAW_AMOUNT (err u100))
 (define-constant ERR_EXCEEDED_MAX_BORROW (err u101))
 (define-constant ERR_CANNOT_BE_LIQUIDATED (err u102))
+(define-constant ERR_MUST_WITHDRAW_BEFORE_NEW_DEPOSIT (err u103))
 
 ;; Constants
 (define-constant LTV_PERCENTAGE u70)
