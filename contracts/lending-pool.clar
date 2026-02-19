@@ -66,6 +66,9 @@
 ;; @desc Deposits STX into the lending pool
 ;; @param amount: The amount of STX to deposit
 ;; @returns (response bool)
+;; @desc Deposits STX into the lending pool
+;; @param amount: The amount of STX to deposit
+;; @returns (response bool)
 (define-public (deposit-stx (amount uint))
     (let (
             (user-deposit (map-get? deposits { user: tx-sender }))
@@ -84,6 +87,9 @@
     )
 )
 
+;; @desc Withdraws STX from the lending pool
+;; @param amount: The amount of STX to withdraw
+;; @returns (response bool)
 ;; @desc Withdraws STX from the lending pool
 ;; @param amount: The amount of STX to withdraw
 ;; @returns (response bool)
@@ -116,6 +122,8 @@
 ;; The user is the tx-sender 
 ;; @desc Gets the total amount of pending STX yield that the lender has earned
 ;; The user is the tx-sender 
+;; @desc Gets the total amount of pending STX yield that the lender has earned
+;; The user is the tx-sender 
 (define-read-only (get-pending-yield)
     (let (
             (user-deposit (map-get? deposits { user: tx-sender }))
@@ -132,6 +140,10 @@
 ;;               BORROWING
 ;; ------------------------------------
 
+;; @desc Borrows STX from the lending pool
+;; @param collateral-amount: The amount of sBTC to use as collateral
+;; @param amount-stx: The amount of STX to borrow
+;; @returns (response bool)
 ;; @desc Borrows STX from the lending pool
 ;; @param collateral-amount: The amount of sBTC to use as collateral
 ;; @param amount-stx: The amount of STX to borrow
@@ -183,6 +195,8 @@
 ;; @returns (response bool)
 ;; @desc Repays the loan in full
 ;; @returns (response bool)
+;; @desc Repays the loan in full
+;; @returns (response bool)
 (define-public (repay)
     (let (
             (user-borrow (map-get? borrows { user: tx-sender }))
@@ -216,6 +230,10 @@
 ;; Includes the amount of STX they have borrowed + interest that has accumulated
 ;; @param user: The user to get the debt for
 ;; @returns (response uint)
+;; @desc Gets the debt for a user
+;; Includes the amount of STX they have borrowed + interest that has accumulated
+;; @param user: The user to get the debt for
+;; @returns (response uint)
 (define-read-only (get-debt (user principal))
     (let (
             (user-borrow (map-get? borrows { user: user }))
@@ -236,6 +254,9 @@
 ;;               LIQUIDATION
 ;; ------------------------------------
 
+;; @desc Liquidates a borrower
+;; @param user: The user to liquidate
+;; @returns (response bool)
 ;; @desc Liquidates a borrower
 ;; @param user: The user to liquidate
 ;; @returns (response bool)
@@ -317,6 +338,8 @@
 ;; @returns (response uint)
 ;; @desc Gets the price of sBTC in STX from the oracle
 ;; @returns (response uint)
+;; @desc Gets the price of sBTC in STX from the oracle
+;; @returns (response uint)
 (define-public (get-sbtc-stx-price)
     (contract-call? .mock-oracle get-price)
 )
@@ -325,10 +348,14 @@
 ;; @returns (response uint)
 ;; @desc Gets the latest timestamp
 ;; @returns (response uint)
+;; @desc Gets the latest timestamp
+;; @returns (response uint)
 (define-private (get-latest-timestamp)
     (unwrap! (get-stacks-block-info? time (- stacks-block-height u1)) u0)
 )
 
+;; @desc Accrues interest for all lenders based on total borrowed STX
+;; @returns (response bool)
 ;; @desc Accrues interest for all lenders based on total borrowed STX
 ;; @returns (response bool)
 ;; @desc Accrues interest for all lenders based on total borrowed STX
