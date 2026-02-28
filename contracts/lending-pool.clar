@@ -3,6 +3,11 @@
 (define-constant ERR_EXCEEDED_MAX_BORROW (err u101))
 (define-constant ERR_CANNOT_BE_LIQUIDATED (err u102))
 (define-constant ERR_MUST_WITHDRAW_BEFORE_NEW_DEPOSIT (err u103))
+(define-constant ERR_INTEREST_ACCRUAL_FAILED (err u104))
+(define-constant ERR_PRICE_ORACLE_FAILED (err u105))
+(define-constant ERR_GET_DEBT_FAILED (err u106))
+(define-constant ERR_TOKEN_TRANSFER_FAILED (err u107))
+(define-constant ERR_GET_BLOCK_INFO_FAILED (err u108))
 
 ;; Constants
 (define-constant LTV_PERCENTAGE u70)
@@ -61,13 +66,17 @@
 ;; @desc Deposits STX into the lending pool
 ;; @param amount: The amount of STX to deposit
 ;; @returns (response bool)
+;; @desc Deposits STX into the lending pool
+;; @param amount: The amount of STX to deposit
+;; @returns (response bool)
 (define-public (deposit-stx (amount uint))
     (let (
             (user-deposit (map-get? deposits { user: tx-sender }))
             (deposited-stx (default-to u0 (get amount user-deposit)))
         )
         (asserts! (is-eq deposited-stx u0) ERR_MUST_WITHDRAW_BEFORE_NEW_DEPOSIT)
-        (unwrap-panic (accrue-interest))
+        (asserts! (is-eq deposited-stx u0) ERR_MUST_WITHDRAW_BEFORE_NEW_DEPOSIT)
+        (unwrap! (accrue-interest) ERR_INTEREST_ACCRUAL_FAILED)
         (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))
         (map-set deposits { user: tx-sender } {
             amount: (+ deposited-stx amount),
@@ -84,16 +93,20 @@
 ;; @desc Withdraws STX from the lending pool
 ;; @param amount: The amount of STX to withdraw
 ;; @returns (response bool)
+;; @desc Withdraws STX from the lending pool
+;; @param amount: The amount of STX to withdraw
+;; @returns (response bool)
 (define-public (withdraw-stx (amount uint))
     (let (
             (user tx-sender)
             (user-deposit (map-get? deposits { user: user }))
             (deposited-stx (default-to u0 (get amount user-deposit)))
             (yield-index (default-to u0 (get yield-index user-deposit)))
-            (pending-yield (unwrap-panic (get-pending-yield)))
+            (yield-index (default-to u0 (get yield-index user-deposit)))
+            (pending-yield (unwrap! (get-pending-yield) ERR_INTEREST_ACCRUAL_FAILED))
         )
         (asserts! (>= deposited-stx amount) ERR_INVALID_WITHDRAW_AMOUNT)
-        (unwrap-panic (accrue-interest))
+        (unwrap! (accrue-interest) ERR_INTEREST_ACCRUAL_FAILED)
 
         (map-set deposits { user: user } {
             amount: (- deposited-stx amount),
@@ -105,6 +118,8 @@
     )
 )
 
+;; @desc Gets the total amount of pending STX yield that the lender has earned
+;; The user is the tx-sender 
 ;; @desc Gets the total amount of pending STX yield that the lender has earned
 ;; The user is the tx-sender 
 ;; @desc Gets the total amount of pending STX yield that the lender has earned
@@ -133,6 +148,10 @@
 ;; @param collateral-amount: The amount of sBTC to use as collateral
 ;; @param amount-stx: The amount of STX to borrow
 ;; @returns (response bool)
+;; @desc Borrows STX from the lending pool
+;; @param collateral-amount: The amount of sBTC to use as collateral
+;; @param amount-stx: The amount of STX to borrow
+;; @returns (response bool)
 (define-public (borrow-stx
         (collateral-amount uint)
         (amount-stx uint)
@@ -142,15 +161,15 @@
             (user-collateral (map-get? collateral { user: user }))
             (deposited-sbtc (default-to u0 (get amount user-collateral)))
             (new-collateral (+ deposited-sbtc collateral-amount))
-            (price (unwrap-panic (get-sbtc-stx-price)))
+            (price (unwrap! (get-sbtc-stx-price) ERR_PRICE_ORACLE_FAILED))
             (max-borrow (/ (* (* new-collateral price) LTV_PERCENTAGE) u100))
             (user-borrow (map-get? borrows { user: user }))
             (borrowed-stx (default-to u0 (get amount user-borrow)))
-            (user-debt (unwrap-panic (get-debt user)))
+            (user-debt (unwrap! (get-debt user) ERR_GET_DEBT_FAILED))
             (new-debt (+ user-debt amount-stx))
         )
         (asserts! (<= new-debt max-borrow) ERR_EXCEEDED_MAX_BORROW)
-        (unwrap-panic (accrue-interest))
+        (unwrap! (accrue-interest) ERR_INTEREST_ACCRUAL_FAILED)
 
         (map-set borrows { user: user } {
             amount: new-debt,
@@ -176,15 +195,17 @@
 ;; @returns (response bool)
 ;; @desc Repays the loan in full
 ;; @returns (response bool)
+;; @desc Repays the loan in full
+;; @returns (response bool)
 (define-public (repay)
     (let (
             (user-borrow (map-get? borrows { user: tx-sender }))
             (borrowed-stx (default-to u0 (get amount user-borrow)))
-            (total-debt (+ u1 (unwrap-panic (get-debt tx-sender))))
+            (total-debt (+ u1 (unwrap! (get-debt tx-sender) ERR_GET_DEBT_FAILED)))
             (user-collateral (map-get? collateral { user: tx-sender }))
             (deposited-sbtc (default-to u0 (get amount user-collateral)))
         )
-        (unwrap-panic (accrue-interest))
+        (unwrap! (accrue-interest) ERR_INTEREST_ACCRUAL_FAILED)
 
         (map-delete collateral { user: tx-sender })
         (var-set total-sbtc-collateral
@@ -201,6 +222,10 @@
     )
 )
 
+;; @desc Gets the debt for a user
+;; Includes the amount of STX they have borrowed + interest that has accumulated
+;; @param user: The user to get the debt for
+;; @returns (response uint)
 ;; @desc Gets the debt for a user
 ;; Includes the amount of STX they have borrowed + interest that has accumulated
 ;; @param user: The user to get the debt for
@@ -235,22 +260,25 @@
 ;; @desc Liquidates a borrower
 ;; @param user: The user to liquidate
 ;; @returns (response bool)
+;; @desc Liquidates a borrower
+;; @param user: The user to liquidate
+;; @returns (response bool)
 (define-public (liquidate (user principal))
     (let (
-            (user-debt (unwrap-panic (get-debt user)))
+            (user-debt (unwrap! (get-debt user) ERR_GET_DEBT_FAILED))
             (forfeited-borrows (if (> user-debt (var-get total-stx-borrows))
                 (var-get total-stx-borrows)
                 user-debt
             ))
             (user-collateral (map-get? collateral { user: user }))
             (deposited-sbtc (default-to u0 (get amount user-collateral)))
-            (price (unwrap-panic (get-sbtc-stx-price)))
+            (price (unwrap! (get-sbtc-stx-price) ERR_PRICE_ORACLE_FAILED))
             (collateral-value-in-stx (* deposited-sbtc price))
             (liquidator-bounty (/ (* deposited-sbtc u10) u100))
             (pool-reward (- deposited-sbtc liquidator-bounty))
-            (sbtc-balance (unwrap-panic (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+            (sbtc-balance (unwrap! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
                 get-balance (as-contract tx-sender)
-            )))
+            ) ERR_TOKEN_TRANSFER_FAILED))
             (xyk-tokens {
                 a: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token,
                 b: 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2,
@@ -261,7 +289,7 @@
                 get-quote-a pool-reward none xyk-tokens xyk-pools
             )))
         )
-        (unwrap-panic (accrue-interest))
+        (unwrap! (accrue-interest) ERR_INTEREST_ACCRUAL_FAILED)
         (asserts! (> user-debt u0) ERR_CANNOT_BE_LIQUIDATED)
         (asserts!
             (<= (* collateral-value-in-stx u100)
@@ -310,6 +338,8 @@
 ;; @returns (response uint)
 ;; @desc Gets the price of sBTC in STX from the oracle
 ;; @returns (response uint)
+;; @desc Gets the price of sBTC in STX from the oracle
+;; @returns (response uint)
 (define-public (get-sbtc-stx-price)
     (contract-call? .mock-oracle get-price)
 )
@@ -318,10 +348,14 @@
 ;; @returns (response uint)
 ;; @desc Gets the latest timestamp
 ;; @returns (response uint)
+;; @desc Gets the latest timestamp
+;; @returns (response uint)
 (define-private (get-latest-timestamp)
-    (unwrap-panic (get-stacks-block-info? time (- stacks-block-height u1)))
+    (unwrap! (get-stacks-block-info? time (- stacks-block-height u1)) u0)
 )
 
+;; @desc Accrues interest for all lenders based on total borrowed STX
+;; @returns (response bool)
 ;; @desc Accrues interest for all lenders based on total borrowed STX
 ;; @returns (response bool)
 ;; @desc Accrues interest for all lenders based on total borrowed STX
